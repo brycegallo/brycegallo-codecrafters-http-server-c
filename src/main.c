@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <pthread.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -100,11 +101,23 @@ void handle_request(char request_buffer[1024], int client_fd) {
     }
 }
 
+// must take void* as an argument and return void*, to be made into a thread
+void* handle_client(void* arg) {
+    int client_fd = *((int *)arg);
+    // Create a request buffer to accept the request to be received by recv()
+    char request_buffer[1024];
+
+    // recv(int socket, void *buffer, size_t length, int flags), returns ssize_t of message length
+    recv(client_fd, request_buffer, 1024, no_flags);
+
+    handle_request(request_buffer, client_fd);
+}
+
 int main() {
     disable_output_buffering();
 
-    int server_fd, client_addr_len;
-    struct sockaddr_in client_addr;
+    int server_fd;
+    
 
     // Creates a socket, server_fd is the socket's file descriptor
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -156,20 +169,27 @@ int main() {
     }
 
     printf("Waiting for a client to connect...\n");
-    client_addr_len = sizeof(client_addr);
 
-    // Accept client connection, accept() will return file descriptor of the accepted socket
-    int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
-    printf("Client connected\n");
+    //for (int i = 0; i < 5; i++) {
+    while (1) {
+	struct sockaddr_in client_addr;
+	int client_addr_len;
+	client_addr_len = sizeof(client_addr);
 
-    // Create a request buffer to accept the request to be received by recv()
-    char request_buffer[1024];
+	int* client_fd = malloc(sizeof(int));
+    
+	// Accept client connection, accept() will return file descriptor of the accepted socket
+	*client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+	printf("Client connected\n");
 
-    // recv(int socket, void *buffer, size_t length, int flags), returns ssize_t of message length
-    recv(client_fd, request_buffer, 1024, no_flags);
+	// Create a thread for handle_client()
+	pthread_t thread_id;
+	pthread_create(&thread_id, NULL, handle_client, (void *)client_fd);
+	pthread_detach(thread_id);
 
-    handle_request(request_buffer, client_fd);
-
+	// I feel like i need to free this somewhere, but i can't here or it stops working
+	//if (client_fd) { free(client_fd); }
+    }
     // Close the server file descriptor
     close(server_fd);
 
