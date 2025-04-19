@@ -55,6 +55,9 @@
  * */
 
 /******************** Reponse Definitions ********************/
+const char* test_directory = "/tmp/data/codecrafters.io/http-server-tester/";
+
+/******************** Reponse Definitions ********************/
 // Define a 200 response to to indicate that the connection succeeded
 const char* response_buffer_200_OK = "HTTP/1.1 200 OK\r\n\r\n";
 // Define a 404 response to to indicate that the requested resource was not found
@@ -76,15 +79,16 @@ void handle_request(char request_buffer[1024], int client_fd) {
     // use sprintf() instead to build response_buffers probably
     char response_buffer[1024]; // used for "echo" and "user-agent"
     char* response_template = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s";
+    char* file_response_template = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %zu\r\n\r\n%s";
     char* request_method = strtok(request_buffer, " "); // first token will be request method
-    printf("Request Method: %s\n", request_method);
+    printf("LOG____Request Method: %s\n", request_method);
     char* request_target = strtok(NULL, " ");		// second token will be request target
-    printf("Request Target: %s\n", request_target);
+    printf("LOG____Request Target: %s\n", request_target);
 
     if (!strcmp(request_target, "/")) {
 	// Send HTTP response to client, send(int socket, const void *buffer, size_t length, int flags)
 	send(client_fd, response_buffer_200_OK, strlen(response_buffer_200_OK), no_flags);
-    } else if (!strncmp(request_target, "/echo", 5)) {
+    } else if (!strncmp(request_target, "/echo/", 6)) {
 	char* echo_message = request_target + 6;
 	sprintf(response_buffer, response_template, strlen(echo_message), echo_message);
 	send(client_fd, response_buffer, strlen(response_buffer), no_flags);
@@ -96,14 +100,43 @@ void handle_request(char request_buffer[1024], int client_fd) {
 	sprintf(response_buffer, response_template, strlen(user_agent), user_agent);
 	send(client_fd, response_buffer, strlen(response_buffer), no_flags);
     }
+    else if (!strncmp(request_target, "/files/", 7)) {
+	char* file_name = request_target + 7;
+	char file_path[1024];
+	char* file_path_template = "/tmp/data/codecrafters.io/http-server-tester/%s";
+	sprintf(file_path, file_path_template, file_name);
+	printf("LOG____%s\n", file_name);
+	printf("LOG____Test Directory: %s\n", test_directory);
+	printf("LOG____Filepath: %s", file_path);
+
+	// create file descriptor for requested file
+	FILE *file_fd = fopen(file_path, "r");
+
+	if (file_fd == NULL) {
+	    send(client_fd, response_buffer_404_NF, strlen(response_buffer_404_NF), no_flags);
+	}
+	else {
+	    char* file_read_buffer[1024] = {};
+	    int file_read_syze_bites = fread(file_read_buffer, 1, 1024, file_fd);
+
+	    if (file_read_syze_bites > 0) {
+		sprintf(response_buffer, file_response_template, file_read_syze_bites, file_read_buffer);
+		send(client_fd, response_buffer, strlen(response_buffer), no_flags);
+	    }
+	    else {
+		send(client_fd, response_buffer_404_NF, strlen(response_buffer_404_NF), no_flags);
+	    }
+	}
+    }
     else {
 	send(client_fd, response_buffer_404_NF, strlen(response_buffer_404_NF), no_flags);
     }
 }
 
 // must take void* as an argument and return void*, to be made into a thread
-void* handle_client(void* arg) {
-    int client_fd = *((int *)arg);
+void* handle_client(void* arg_client_fd) {
+    int client_fd = *((int*)arg_client_fd);
+
     // Create a request buffer to accept the request to be received by recv()
     char request_buffer[1024];
 
@@ -113,24 +146,23 @@ void* handle_client(void* arg) {
     handle_request(request_buffer, client_fd);
 }
 
-int main() {
+int main(int argc, char **argv) {
+//int main() {
     disable_output_buffering();
-
-    int server_fd;
     
+    int server_fd;
 
     // Creates a socket, server_fd is the socket's file descriptor
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1) {
-	printf("Socket creation failed: %s...\n", strerror(errno));
+	printf("LOG____Socket creation failed: %s...\n", strerror(errno));
 	return 1;
     }
 	
-    // Since the tester restarts your program quite often, setting SO_REUSEADDR
-    // ensures that we don't run into 'Address already in use' errors
+    // Tester restarts the program quite often, setting SO_REUSEADDR ensures we don't get 'Address already in use' errors
     int reuse = 1;
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-	printf("SO_REUSEADDR failed: %s \n", strerror(errno));
+	printf("LOG____SO_REUSEADDR failed: %s \n", strerror(errno));
 	return 1;
     }
 
@@ -157,39 +189,41 @@ int main() {
 
     // Binds the socket created/configured above to a specified port
     if (bind(server_fd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) != 0) {
-	printf("Bind failed: %s \n", strerror(errno));
+	printf("LOG____Bind failed: %s \n", strerror(errno));
 	return 1;
     }
 
     int connection_backlog = 5; // number of pending client connections the server will allow to queue
     // Begin listening for incoming connections
     if (listen(server_fd, connection_backlog) != 0) {
-	printf("Listen failed: %s \n", strerror(errno));
+	printf("LOG____Listen failed: %s \n", strerror(errno));
 	return 1;
     }
 
-    printf("Waiting for a client to connect...\n");
+    printf("LOG____Waiting for a client to connect...\n");
 
-    //for (int i = 0; i < 5; i++) {
+    // (1) malloc() here
+    int* client_fd = malloc(sizeof(int));
+    
     while (1) {
 	struct sockaddr_in client_addr;
-	int client_addr_len;
-	client_addr_len = sizeof(client_addr);
+	int client_addr_len = sizeof(client_addr);
 
-	int* client_fd = malloc(sizeof(int));
-    
 	// Accept client connection, accept() will return file descriptor of the accepted socket
-	*client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
-	printf("Client connected\n");
+	*client_fd = accept(server_fd, (struct sockaddr*) &client_addr, &client_addr_len);
+	// // theoretically, client_fd might be variable and could potentially require realloc(), but probably not
+	printf("LOG____Client connected\n");
 
 	// Create a thread for handle_client()
 	pthread_t thread_id;
-	pthread_create(&thread_id, NULL, handle_client, (void *)client_fd);
+	pthread_create(&thread_id, NULL, handle_client, (void*)client_fd);
+	//pthread_create(&thread_id, NULL, handle_client, (void*)client_fd, (void*)directory_path);
 	pthread_detach(thread_id);
 
-	// I feel like i need to free this somewhere, but i can't here or it stops working
-	//if (client_fd) { free(client_fd); }
     }
+    // (1) free() here
+    if (client_fd) { free(client_fd); }
+    
     // Close the server file descriptor
     close(server_fd);
 
