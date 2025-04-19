@@ -58,9 +58,11 @@
 const char* test_directory = "/tmp/data/codecrafters.io/http-server-tester/";
 
 /******************** Reponse Definitions ********************/
-// Define a 200 response to to indicate that the connection succeeded
+// Define a 200 response indicating that the connection succeeded
 const char* response_buffer_200_OK = "HTTP/1.1 200 OK\r\n\r\n";
-// Define a 404 response to to indicate that the requested resource was not found
+// Define a 201 response indicating that the requested resource was created
+const char* response_buffer_201_Created = "HTTP/1.1 201 Created\r\n\r\n";
+// Define a 404 response indicating that the requested resource was not found
 const char* response_buffer_404_NF = "HTTP/1.1 404 Not Found\r\n\r\n";
 // Define an int with value 0 to be used when we don't want to include any flags
 const int no_flags = 0;
@@ -107,25 +109,45 @@ void handle_request(char request_buffer[1024], int client_fd) {
 	sprintf(file_path, file_path_template, file_name);
 	printf("LOG____%s\n", file_name);
 	printf("LOG____Test Directory: %s\n", test_directory);
-	printf("LOG____Filepath: %s", file_path);
+	printf("LOG____Filepath: %s\n", file_path);
 
-	// create file descriptor for requested file
-	FILE *file_fd = fopen(file_path, "r");
-
-	if (file_fd == NULL) {
-	    send(client_fd, response_buffer_404_NF, strlen(response_buffer_404_NF), no_flags);
-	}
-	else {
-	    char* file_read_buffer[1024] = {};
-	    int file_read_syze_bites = fread(file_read_buffer, 1, 1024, file_fd);
-
-	    if (file_read_syze_bites > 0) {
-		sprintf(response_buffer, file_response_template, file_read_syze_bites, file_read_buffer);
-		send(client_fd, response_buffer, strlen(response_buffer), no_flags);
-	    }
-	    else {
+	if (!strcmp(request_method, "GET")) {
+	    // create file descriptor for requested file
+	    FILE *file_fd = fopen(file_path, "r");
+	
+	    if (file_fd == NULL) {
 		send(client_fd, response_buffer_404_NF, strlen(response_buffer_404_NF), no_flags);
 	    }
+	    else {
+		char* file_read_buffer[1024] = {};
+		int file_read_syze_bites = fread(file_read_buffer, 1, 1024, file_fd);
+	    
+		if (file_read_syze_bites > 0) {
+		    sprintf(response_buffer, file_response_template, file_read_syze_bites, file_read_buffer);
+		    send(client_fd, response_buffer, strlen(response_buffer), no_flags);
+		}
+		else {
+		    send(client_fd, response_buffer_404_NF, strlen(response_buffer_404_NF), no_flags);
+		}
+	    }
+	    // i think i need this here, maybe higher actually
+	    fclose(file_fd);
+	}
+	else if (!strcmp(request_method, "POST")) {
+	    // i'm thinking either FILE *file_fd = fopen(file_path, "r"); above is not the best name, or this below isn't, will look into it
+	    strtok(NULL, "\r\n");
+	    strtok(NULL, "\r\n");
+	    char* request_body_length = strtok(NULL, "\r\n");
+	    printf("LOG___Request Body Length: %s\n", request_body_length + 16);
+	    strtok(NULL, "\r\n");
+	    char* request_body = strtok(NULL, "\r\n");
+	    printf("LOG___Request Body: %s\n", request_body);
+
+	    FILE *file_pointer = fopen(file_path, "w");
+	    fprintf(file_pointer, request_body);
+	    // i think i need this here
+	    fclose(file_pointer);
+	    send(client_fd, response_buffer_201_Created, strlen(response_buffer_201_Created), no_flags);
 	}
     }
     else {
