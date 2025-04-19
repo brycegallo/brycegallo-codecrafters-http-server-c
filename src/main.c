@@ -68,15 +68,13 @@ void disable_output_buffering(void) {
 }
 
 void handle_request(char request_buffer[1024], int client_fd) {
-    //char[50] HTTP_version = "HTTP/1.1 ";// 9  characters
+    //char* HTTP_version = "HTTP/1.1 ";// 9  characters
     //char* status_200 = "200 OK";	// 6  characters
     //char* status_404 = "400 Not Found"; // 13 characters
     //char$ crlf = "\r\n";		// 4  characters
-    // maybe user strncat()? could end up being more trouble than its worth
-//    printf("%d", strlen(echo_target_part_1));
-//    char echo_target_part_2[8] = "\r\n\r\n";
     // use sprintf() instead to build response_buffers probably
-
+    char response_buffer[1024]; // used for "echo" and "user-agent"
+    char* response_template = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s";
     char* request_method = strtok(request_buffer, " "); // first token will be request method
     printf("Request Method: %s\n", request_method);
     char* request_target = strtok(NULL, " ");		// second token will be request target
@@ -85,13 +83,19 @@ void handle_request(char request_buffer[1024], int client_fd) {
     if (!strcmp(request_target, "/")) {
 	// Send HTTP response to client, send(int socket, const void *buffer, size_t length, int flags)
 	send(client_fd, response_buffer_200_OK, strlen(response_buffer_200_OK), no_flags);
-    } else if (!strncmp(request_target + 1, "echo", 4)) {
+    } else if (!strncmp(request_target, "/echo", 5)) {
 	char* echo_message = request_target + 6;
-	char response_buffer[1024];
-	char* echo_response_template = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s";
-	sprintf(response_buffer, echo_response_template, strlen(echo_message), echo_message);
+	sprintf(response_buffer, response_template, strlen(echo_message), echo_message);
 	send(client_fd, response_buffer, strlen(response_buffer), no_flags);
-    } else {
+    } 
+    else if (!strcmp(request_target, "/user-agent")) {
+       	strtok(NULL, "\r\n");
+       	strtok(NULL, "\r\n");
+	char* user_agent = strtok(NULL, "\r\n") + 12;
+	sprintf(response_buffer, response_template, strlen(user_agent), user_agent);
+	send(client_fd, response_buffer, strlen(response_buffer), no_flags);
+    }
+    else {
 	send(client_fd, response_buffer_404_NF, strlen(response_buffer_404_NF), no_flags);
     }
 }
