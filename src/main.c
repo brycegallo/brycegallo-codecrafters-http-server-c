@@ -74,14 +74,33 @@ void disable_output_buffering(void) {
 }
 
 void handle_request(char request_buffer[1024], int client_fd) {
-    //char* HTTP_version = "HTTP/1.1 ";// 9  characters
-    //char* status_200 = "200 OK";	// 6  characters
-    //char* status_404 = "400 Not Found"; // 13 characters
-    //char$ crlf = "\r\n";		// 4  characters
-    // use sprintf() instead to build response_buffers probably
+    printf("LOG____Request Buffer: %s\n", request_buffer);
+
+    int content_encoding_active;
+    char* content_encoding;
+    char gzip_response_buffer[1024]; // used for encoded gzip
     char response_buffer[1024]; // used for "echo" and "user-agent"
+				//
     char* response_template = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s";
+    char* gzip_response_template = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n%sContent-Length: %zu\r\n\r\n%s";
     char* file_response_template = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %zu\r\n\r\n%s";
+    
+    if (strstr(request_buffer, "Accept-Encoding: gzip") != NULL) {
+	content_encoding = "Content-Encoding: gzip\r\n";
+	printf("LOG____Client Accepts gzip\n");
+    } else {
+	content_encoding = "\r\n";
+    }
+    if (strstr(request_buffer, "Accept-Encoding: gzip") != NULL) {
+	content_encoding_active = 1;
+	printf("LOG____Client Accepts gzip\n");
+    } else {
+	printf("LOG____Client DOES NOT Accept gzip\n");
+	content_encoding_active = 0;
+    }
+    printf("LOG____content_encoding_active = %d\n", content_encoding_active);
+    printf("LOG____content_encoding = %s\n", content_encoding);
+
     char* request_method = strtok(request_buffer, " "); // first token will be request method
     printf("LOG____Request Method: %s\n", request_method);
     char* request_target = strtok(NULL, " ");		// second token will be request target
@@ -90,10 +109,20 @@ void handle_request(char request_buffer[1024], int client_fd) {
     if (!strcmp(request_target, "/")) {
 	// Send HTTP response to client, send(int socket, const void *buffer, size_t length, int flags)
 	send(client_fd, response_buffer_200_OK, strlen(response_buffer_200_OK), no_flags);
-    } else if (!strncmp(request_target, "/echo/", 6)) {
-	char* echo_message = request_target + 6;
-	sprintf(response_buffer, response_template, strlen(echo_message), echo_message);
-	send(client_fd, response_buffer, strlen(response_buffer), no_flags);
+    }
+    else if (!strncmp(request_target, "/echo/", 6)) {
+	if (!content_encoding_active) {
+	    char* echo_message = request_target + 6;
+	    sprintf(response_buffer, response_template, strlen(echo_message), echo_message);
+	    send(client_fd, response_buffer, strlen(response_buffer), no_flags);
+	}
+	else {
+	    char* echo_message_gzip = request_target + 6;
+	    printf("LOG___echo_message_gzip: %s\n", echo_message_gzip);
+	    sprintf(gzip_response_buffer, gzip_response_template, content_encoding, strlen(echo_message_gzip), echo_message_gzip);
+	    printf("LOG____response_buffer: %s\n", gzip_response_buffer);
+	    send(client_fd, gzip_response_buffer, strlen(gzip_response_buffer), no_flags);
+	}
     } 
     else if (!strcmp(request_target, "/user-agent")) {
        	strtok(NULL, "\r\n");
@@ -134,7 +163,6 @@ void handle_request(char request_buffer[1024], int client_fd) {
 	    fclose(file_fd);
 	}
 	else if (!strcmp(request_method, "POST")) {
-	    // i'm thinking either FILE *file_fd = fopen(file_path, "r"); above is not the best name, or this below isn't, will look into it
 	    strtok(NULL, "\r\n");
 	    strtok(NULL, "\r\n");
 	    char* request_body_length = strtok(NULL, "\r\n");
@@ -142,7 +170,7 @@ void handle_request(char request_buffer[1024], int client_fd) {
 	    strtok(NULL, "\r\n");
 	    char* request_body = strtok(NULL, "\r\n");
 	    printf("LOG___Request Body: %s\n", request_body);
-
+	    // i'm thinking either FILE *file_fd = fopen(file_path, "r"); above is not the best name, or this below isn't, will look into it
 	    FILE *file_pointer = fopen(file_path, "w");
 	    fprintf(file_pointer, request_body);
 	    // i think i need this here
