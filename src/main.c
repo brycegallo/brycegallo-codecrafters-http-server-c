@@ -81,22 +81,19 @@ void handle_request(char request_buffer[1024], int client_fd) {
     char gzip_response_buffer[1024]; // used for encoded gzip
     char response_buffer[1024]; // used for "echo" and "user-agent"
 				//
-    char* response_template = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s";
+    char* response_template      = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s";
     char* gzip_response_template = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n%sContent-Length: %zu\r\n\r\n%s";
     char* file_response_template = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %zu\r\n\r\n%s";
     
-    if (strstr(request_buffer, "Accept-Encoding: gzip") != NULL) {
+    // Detect gzip as an accepted encoding
+    if (strstr(request_buffer, "Accept-Encoding:") != NULL && strstr(request_buffer, "gzip") != NULL) {
+	content_encoding_active = 1;
 	content_encoding = "Content-Encoding: gzip\r\n";
 	printf("LOG____Client Accepts gzip\n");
     } else {
-	content_encoding = "\r\n";
-    }
-    if (strstr(request_buffer, "Accept-Encoding: gzip") != NULL) {
-	content_encoding_active = 1;
-	printf("LOG____Client Accepts gzip\n");
-    } else {
-	printf("LOG____Client DOES NOT Accept gzip\n");
 	content_encoding_active = 0;
+	printf("LOG____Client DOES NOT Accept gzip\n");
+	content_encoding = "\r\n";
     }
     printf("LOG____content_encoding_active = %d\n", content_encoding_active);
     printf("LOG____content_encoding = %s\n", content_encoding);
@@ -110,16 +107,15 @@ void handle_request(char request_buffer[1024], int client_fd) {
 	// Send HTTP response to client, send(int socket, const void *buffer, size_t length, int flags)
 	send(client_fd, response_buffer_200_OK, strlen(response_buffer_200_OK), no_flags);
     }
-    else if (!strncmp(request_target, "/echo/", 6)) {
+    else if (!strncmp(request_target, "/echo/", 6)) {    
+	char* echo_message = request_target + 6;
+
 	if (!content_encoding_active) {
-	    char* echo_message = request_target + 6;
 	    sprintf(response_buffer, response_template, strlen(echo_message), echo_message);
 	    send(client_fd, response_buffer, strlen(response_buffer), no_flags);
 	}
 	else {
-	    char* echo_message_gzip = request_target + 6;
-	    printf("LOG___echo_message_gzip: %s\n", echo_message_gzip);
-	    sprintf(gzip_response_buffer, gzip_response_template, content_encoding, strlen(echo_message_gzip), echo_message_gzip);
+	    sprintf(gzip_response_buffer, gzip_response_template, content_encoding, strlen(echo_message), echo_message);
 	    printf("LOG____response_buffer: %s\n", gzip_response_buffer);
 	    send(client_fd, gzip_response_buffer, strlen(gzip_response_buffer), no_flags);
 	}
