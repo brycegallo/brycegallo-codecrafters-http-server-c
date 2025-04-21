@@ -113,9 +113,22 @@ void process_request_buffer(struct buffer_struct *request_buffer_struct, char re
     // regcomp - regex points to memory location where expression is matched and stored
     // regcomp - expression is the string to match
     // flag - 
-    int regex_comp_result = regcomp(&regex, "^GET", 0);
+    //int regex_comp_result = regcomp(&regex, "^GET", 0);
+    //int regex_comp_result = regcomp(&regex, "^GET", REG_EXTENDED | REG_ICASE);
+
+    int regex_comp_result = regcomp(&regex, "^GET", REG_EXTENDED);
+    
+    const size_t n_match = 10;
+    regmatch_t p_match[nmatch + 1];
     int regexc_result = regexec(&regex, request_buffer, 0, NULL, 0);
-    if (regexc_result == 0) { printf("LOG____PRB()____regex match\n"); }
+    if (regexc_result == 0) {
+	printf("LOG____PRB()____REGEX MATCH\n");
+	for (size_t i = 0; p_match[i].rm_so != -1 && i < n_match; i++) {
+	    char regex_buffer[256] = {0};
+	    strncpy(regex_buffer, request_buffer + p_match[i].rm_eo, p_match[i].rm_so);
+	    printf("LOG____PRB()____REGEX start %d, end %d: %s\n", p_match[i].rm_so, p_match[i].rm_eo, regex_buffer);
+	}
+    }
     regfree(&regex);
 
     printf("LOG____PRB()____Request Buffer: %s\n", request_buffer);
