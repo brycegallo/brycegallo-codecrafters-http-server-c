@@ -1,3 +1,4 @@
+#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -54,10 +55,10 @@
  *
  * */
 
-/******************** Reponse Definitions ********************/
+/********************* Reponse Definitions *********************/
 const char* test_directory = "/tmp/data/codecrafters.io/http-server-tester/";
 
-/******************** Reponse Definitions ********************/
+/********************* Reponse Definitions *********************/
 // Define a 200 response indicating that the connection succeeded
 const char* response_buffer_200_OK = "HTTP/1.1 200 OK\r\n\r\n";
 // Define a 201 response indicating that the requested resource was created
@@ -67,28 +68,105 @@ const char* response_buffer_404_NF = "HTTP/1.1 404 Not Found\r\n\r\n";
 // Define an int with value 0 to be used when we don't want to include any flags
 const int no_flags = 0;
 
+/********************** Reponse Building **********************/
+const char* http_version_1_1 = "HTTP/1.1";
+
+const char* status_code_200  = "200";
+const char* status_code_201  = "201";
+const char* status_code_404  = "404";
+
+const char* reason_phrase_OK = " OK\r\n";
+const char* reason_phrase_NF = " Not Found\r\n";
+const char* reason_phrase_no = " \r\n";
+
+const char* headers_none     = "\r\n";
+const char* header_content_encoding = "\r\nContent-Encoding:";
+const char* header_content_encoding_gzip = "\r\nContent-Encoding: gzip";
+
+const char* header_content_length = "\r\nContent-Length:";
+
+const char* body_empty       = "";
+/******************************  ******************************/
+
+typedef struct buffer_struct {
+    char* request_method;
+    char* request_target;
+    char* http_version;
+    char* host;
+    char* user_agent;
+    char* accept;
+} buffer_struct;
+
+
 void disable_output_buffering(void) {
     // Disable output buffering
     setbuf(stdout, NULL);	
     setbuf(stderr, NULL);
 }
 
+//void process_request_buffer(char request_buffer[1024]) {
+//void process_request_buffer(buffer_struct* request_buffer_struct, char request_buffer[1024]) {
+void process_request_buffer(struct buffer_struct *request_buffer_struct, char request_buffer[1024]) {
+    regex_t regex;
+    // try to implement regex here
+    // regcomp(&regex, expression, flag) - returns 0 or error_code
+    // regcomp - regex points to memory location where expression is matched and stored
+    // regcomp - expression is the string to match
+    // flag - 
+    int regex_comp_result = regcomp(&regex, "^GET", 0);
+    printf("%d", regex_comp_result);
+    regfree(regex);
+
+
+    printf("LOG____PRB()____Request Buffer: %s\n", request_buffer);
+    //char* request_buffer_pointer = request_buffer;
+    char* save_pointer;
+    //char* array[6];
+    //char* array[4];
+    //char* array = (char*)malloc(6 * sizeof(char));
+    // Array Contents:
+    // array[0] = request method
+    // array[1] = request target
+    // array[2] = HTTP Version
+    // array[3] = Host
+    // array[4] = User-Agent	(optional - kind of)
+    // array[5] = Accept	(optional)
+    
+    char* request_method = strtok_r(request_buffer, " ", &save_pointer); // first token will be request method
+    char* request_target = strtok_r(request_buffer, " ", &save_pointer); // second token will be request target
+    char* request_http_version = strtok_r(request_buffer, " ", &save_pointer); // third token will be host
+    char* request_host = strtok_r(request_buffer, " ", &save_pointer); // third token will be host
+    request_buffer_struct->request_method = request_method;
+    request_buffer_struct->request_target = request_target;
+    request_buffer_struct->http_version = request_http_version;
+    request_buffer_struct->host = request_host;
+}
+
 void handle_request(char request_buffer[1024], int client_fd) {
+    char* request_buffer_duplicate = strdup(request_buffer);
+    //process_request_buffer(request_buffer_duplicate);
+
+    struct buffer_struct request_buffer_struct;
+    process_request_buffer(&request_buffer_struct, request_buffer_duplicate);
+    //printf("LOG____struct request method: %s\n", request_buffer_struct.request_method);
+
+
     printf("LOG____Request Buffer: %s\n", request_buffer);
 
     int content_encoding_active;
     char* content_encoding;
-    char gzip_response_buffer[1024]; // used for encoded gzip
     char response_buffer[1024]; // used for "echo" and "user-agent"
-				//
-    char* response_template      = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s";
-    char* gzip_response_template = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n%sContent-Length: %zu\r\n\r\n%s";
-    char* file_response_template = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %zu\r\n\r\n%s";
+    
+    // %s1 = HTTP Version ____ %s2 = Status Code ____ %s3 = Reason Phrase ____ %s4 = Headers
+    char* empty_response_template = "%s %s%s%s%s";
+    char* response_template       = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n%s";
+    char* gzip_response_template  = "HTTP/1.1 200 OK\r\nContent-Type: text/plain%sContent-Length: %zu\r\n\r\n%s";
+    char* file_response_template  = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %zu\r\n\r\n%s";
     
     // Detect gzip as an accepted encoding
     if (strstr(request_buffer, "Accept-Encoding:") != NULL && strstr(request_buffer, "gzip") != NULL) {
 	content_encoding_active = 1;
-	content_encoding = "Content-Encoding: gzip\r\n";
+	content_encoding = "\r\nContent-Encoding: gzip\r\n";
 	printf("LOG____Client Accepts gzip\n");
     } else {
 	content_encoding_active = 0;
@@ -98,32 +176,40 @@ void handle_request(char request_buffer[1024], int client_fd) {
     printf("LOG____content_encoding_active = %d\n", content_encoding_active);
     printf("LOG____content_encoding = %s\n", content_encoding);
 
-    char* request_method = strtok(request_buffer, " "); // first token will be request method
-    printf("LOG____Request Method: %s\n", request_method);
-    char* request_target = strtok(NULL, " ");		// second token will be request target
+    char* request_buffer_pointer = request_buffer;
+    char* request_method = strtok_r(request_buffer_pointer, " ", &request_buffer_pointer); // first token will be request method
+    //printf("LOG____Request Method: %s\n", request_method);
+    printf("LOG____Request Method: %s\n", request_buffer_struct.request_method);
+    char* request_target = strtok_r(request_buffer_pointer, " ", &request_buffer_pointer);		// second token will be request target
     printf("LOG____Request Target: %s\n", request_target);
 
+    // Updated to use Empty Response Template
     if (!strcmp(request_target, "/")) {
+	sprintf(response_buffer, empty_response_template, http_version_1_1, status_code_200, reason_phrase_OK, headers_none, body_empty);
+	printf("LOG____New Response Buffer: %s\n", response_buffer);
 	// Send HTTP response to client, send(int socket, const void *buffer, size_t length, int flags)
-	send(client_fd, response_buffer_200_OK, strlen(response_buffer_200_OK), no_flags);
+	send(client_fd, response_buffer, strlen(response_buffer), no_flags);
     }
     else if (!strncmp(request_target, "/echo/", 6)) {    
 	char* echo_message = request_target + 6;
 
+	// No content_encoding
 	if (!content_encoding_active) {
-	    sprintf(response_buffer, response_template, strlen(echo_message), echo_message);
+	    sprintf(response_buffer, gzip_response_template, content_encoding, strlen(echo_message), echo_message);
+	    printf("LOG____ Echo Response Buffer Without GZIP: %s\n", response_buffer);
 	    send(client_fd, response_buffer, strlen(response_buffer), no_flags);
 	}
+	// content_encoding
 	else {
-	    sprintf(gzip_response_buffer, gzip_response_template, content_encoding, strlen(echo_message), echo_message);
-	    printf("LOG____response_buffer: %s\n", gzip_response_buffer);
-	    send(client_fd, gzip_response_buffer, strlen(gzip_response_buffer), no_flags);
+	    sprintf(response_buffer, gzip_response_template, content_encoding, strlen(echo_message), echo_message);
+	    printf("LOG____response_buffer With GZIP: %s\n", response_buffer);
+	    send(client_fd, response_buffer, strlen(response_buffer), no_flags);
 	}
     } 
     else if (!strcmp(request_target, "/user-agent")) {
-       	strtok(NULL, "\r\n");
-       	strtok(NULL, "\r\n");
-	char* user_agent = strtok(NULL, "\r\n") + 12;
+       	strtok_r(request_buffer_pointer, "\r\n", &request_buffer_pointer);
+       	strtok_r(request_buffer_pointer, "\r\n", &request_buffer_pointer);
+	char* user_agent = strtok_r(request_buffer_pointer, "\r\n", &request_buffer_pointer) + 12;
 	sprintf(response_buffer, response_template, strlen(user_agent), user_agent);
 	send(client_fd, response_buffer, strlen(response_buffer), no_flags);
     }
@@ -159,12 +245,12 @@ void handle_request(char request_buffer[1024], int client_fd) {
 	    fclose(file_fd);
 	}
 	else if (!strcmp(request_method, "POST")) {
-	    strtok(NULL, "\r\n");
-	    strtok(NULL, "\r\n");
-	    char* request_body_length = strtok(NULL, "\r\n");
+	    strtok_r(request_buffer_pointer, "\r\n", &request_buffer_pointer);
+	    strtok_r(request_buffer_pointer, "\r\n", &request_buffer_pointer);
+	    char* request_body_length = strtok_r(request_buffer_pointer, "\r\n", &request_buffer_pointer);
 	    printf("LOG___Request Body Length: %s\n", request_body_length + 16);
-	    strtok(NULL, "\r\n");
-	    char* request_body = strtok(NULL, "\r\n");
+	    strtok_r(request_buffer_pointer, "\r\n", &request_buffer_pointer);
+	    char* request_body = strtok_r(request_buffer_pointer, "\r\n", &request_buffer_pointer);
 	    printf("LOG___Request Body: %s\n", request_body);
 	    // i'm thinking either FILE *file_fd = fopen(file_path, "r"); above is not the best name, or this below isn't, will look into it
 	    FILE *file_pointer = fopen(file_path, "w");
@@ -177,6 +263,8 @@ void handle_request(char request_buffer[1024], int client_fd) {
     else {
 	send(client_fd, response_buffer_404_NF, strlen(response_buffer_404_NF), no_flags);
     }
+    // All members of the struct buffer_struct assigned in process_request_buffer() will be invalid after this call
+    free(request_buffer_duplicate);
 }
 
 // must take void* as an argument and return void*, to be made into a thread
