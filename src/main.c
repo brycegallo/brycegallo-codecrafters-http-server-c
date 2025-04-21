@@ -114,9 +114,9 @@ void process_request_buffer(struct buffer_struct *request_buffer_struct, char re
     // regcomp - expression is the string to match
     // flag - 
     int regex_comp_result = regcomp(&regex, "^GET", 0);
-    if (regex_comp_result == 0) { printf("LOG____PRB()____regex match"); }
     regfree(&regex);
-
+    int regexc_result = regexec(&regex, request_buffer);
+    if (regexc_result == 0) { printf("LOG____PRB()____regex match\n"); }
 
     printf("LOG____PRB()____Request Buffer: %s\n", request_buffer);
     //char* request_buffer_pointer = request_buffer;
