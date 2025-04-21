@@ -120,6 +120,7 @@ void process_request_buffer(struct buffer_struct *request_buffer_struct, char re
     
     const size_t n_match = 10;
     regmatch_t p_match[n_match + 1];
+    char* request_buffer_pointer = request_buffer;
     int regexc_result = regexec(&regex, request_buffer, n_match, p_match, 0);
     if (regexc_result == 0) {
 	printf("LOG____PRB()____REGEX MATCH\n");
