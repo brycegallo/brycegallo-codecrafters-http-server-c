@@ -114,7 +114,8 @@ static char* gzip_deflate(char* input, size_t input_length, size_t* output_lengt
     z_stream stream = {0};
     // (stream, compression level, compression algorithm, window size 15 bit + 16 bits enabling gzip header/footer for metadata
     // compression strategy)
-    deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 0x1F, 8, Z_DEFAULT_STRATEGY);
+    //deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 0x1F, 8, Z_DEFAULT_STRATEGY);
+    deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY);
 
     size_t max_length = deflateBound(&stream, input_length);
     char* gzip_data = malloc(max_length);
@@ -244,9 +245,17 @@ void handle_request(char request_buffer[1024], int client_fd) {
 	}
 	// content_encoding
 	else {
-	    sprintf(response_buffer, gzip_response_template, content_encoding, strlen(echo_message), echo_message);
+	    uLong gzip_body_length;
+	    char* gzip_response_body;
+	    gzip_response_body = gzip_deflate(echo_message, strlen(echo_message), &gzip_body_length);
+	    //sprintf(response_buffer, gzip_response_template, content_encoding, strlen(echo_message), echo_message);
+	    ///char* new_gzip_response_template  = "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain%sContent-Length: %zu\r\n\r\n%s";
+	    char* new_gzip_response_template  = "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\n\r\n";
+	    sprintf(response_buffer, new_gzip_response_template, gzip_body_length);
+	    ///sprintf(response_buffer, new_gzip_response_template, content_encoding, gzip_body_length, gzip_response_body);
 	    printf("LOG____response_buffer With GZIP: %s\n", response_buffer);
 	    send(client_fd, response_buffer, strlen(response_buffer), no_flags);
+	    send(client_fd, gzip_response_body, gzip_body_length, no_flags);
 	}
     } 
     else if (!strcmp(request_target, "/user-agent")) {
